@@ -22,12 +22,7 @@ PASTA_SAIDA = "csv_final"
 
 os.makedirs(PASTA_SAIDA, exist_ok=True)
 
-# ============================================================
-# 1. LISTAS DE REFERÊNCIA (CANÔNICAS)
-# ============================================================
-# Estes são os ÚNICOS valores que entrarão no seu banco.
-# O resto será convertido para um destes ou descartado.
-
+# Listas de Referência (Whitelist)
 SINTOMAS_VALIDOS = [
     "Febre", "Tosse", "Dor De Garganta", "Dificuldade Respiratoria", 
     "Mialgia", "Dor No Corpo", "Diarreia", "Vomito", "Nausea",
@@ -46,9 +41,7 @@ CONDICOES_VALIDAS = [
     "Doenca Hematologica", "Hipotireoidismo", "Idoso", "Profissional De Saude"
 ]
 
-# Mapa de Conversão Forçada (Para erros que o robô não pega sozinho)
 DE_PARA_FORCADO = {
-    # Sintomas
     "agia": "Dor", "algia": "Dor", "algi": "Dor", "dores": "Dor",
     "adinafagia": "Dor De Garganta", "odinofagia": "Dor De Garganta",
     "ansia": "Nausea", "emese": "Vomito",
@@ -59,8 +52,6 @@ DE_PARA_FORCADO = {
     "corpo": "Dor No Corpo", "juntas": "Dor No Corpo",
     "vertigem": "Tontura", "vertiegem": "Tontura",
     "disenteria": "Diarreia",
-    
-    # Condições
     "cardio": "Doenca Cardiovascular", "coracao": "Doenca Cardiovascular", "cardiaca": "Doenca Cardiovascular",
     "pulmao": "Doenca Respiratoria", "dpoc": "Doenca Respiratoria",
     "renal": "Doenca Renal", "rim": "Doenca Renal",
@@ -68,102 +59,62 @@ DE_PARA_FORCADO = {
     "imuno": "Imunossupressao",
     "gravida": "Gestante",
     "pressao": "Hipertensao", "has": "Hipertensao",
-    "acidente": None, "trauma": None, "fratura": None, # Ignorar causas externas
+    "acidente": None, "trauma": None, "fratura": None, 
     "alzaimer": "Doenca Neurologica", "alzheimer": "Doenca Neurologica", "parkinson": "Doenca Neurologica",
-    "alergia": None, "ansiedade": None, "depressao": None # Ignorar não riscos COVID
+    "alergia": None, "ansiedade": None, "depressao": None 
 }
 
 # ============================================================
-# 2. INTELIGÊNCIA DE LIMPEZA
+# FUNÇÕES DE LIMPEZA E LÓGICA
 # ============================================================
 
 def normalizar_texto(texto):
-    """Remove acentos e caracteres especiais para comparação."""
     if not isinstance(texto, str): return ""
     texto = texto.lower().strip()
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 def identificar_termo_canonico(texto_sujo, lista_valida):
-    """
-    1. Limpa lixo.
-    2. Tenta mapeamento direto.
-    3. Tenta Fuzzy Match (Semelhança).
-    """
     if not isinstance(texto_sujo, str): return None
-    
-    # 1. Limpeza Bruta
-    # Remove numeros, pontos, traços iniciais (Ex: "01 - Febre" -> "Febre")
-    limpo = re.sub(r'^[\d\W_]+', '', texto_sujo).strip()
-    limpo = limpo.replace(";", "").replace('"', '').replace("'", "")
-    
-    if len(limpo) < 3: return None # Remove "01", "Ok", "A"
-    
-    # Normaliza para busca (minusculo, sem acento)
+    limpo = re.sub(r'^[\d\W_]+', '', texto_sujo).strip().replace(";", "").replace('"', '').replace("'", "")
+    if len(limpo) < 3: return None 
     busca = normalizar_texto(limpo)
     
-    # 2. Bloqueios explícitos (Lixo médico que não é sintoma)
     termos_bloqueados = ['teste', 'exame', 'covid', 'positivo', 'negativo', 'reagente', 
                          'igg', 'igm', 'saturacao', 'transferencia', 'alta', 'obito', 
                          'isolamento', 'contato', 'monitoramento', 'acemp', 'alfis']
     if any(x in busca for x in termos_bloqueados): return None
     
-    # 3. Tentativa de De/Para manual (substring)
     for chave, valor in DE_PARA_FORCADO.items():
         if chave in busca:
-            if valor is None: return None # Bloqueio explícito
-            # Se encontrou "agia" (Dor), precisamos ver o contexto.
-            # Mas para simplificar, se mapeou, retorna o mapeado.
-            # Exceção: "agia" pode ser "mialgia" (que vira Dor no Corpo).
-            # Vamos deixar o fuzzy resolver casos complexos, mas usar o forçado para correções obvias.
-            if valor in lista_valida: # Só retorna se o mapeado for valido para esta lista
-                return valor
-            # Se for condição mapeada para sintoma (erro de coluna), ignoramos aqui.
+            if valor is None: return None
+            if valor in lista_valida: return valor
 
-    # 4. Fuzzy Matching (A Mágica)
-    # Procura na lista válida se tem algo parecido (min 75% de semelhança)
     matches = get_close_matches(limpo.title(), lista_valida, n=1, cutoff=0.75)
-    if matches:
-        return matches[0]
+    if matches: return matches[0]
         
-    # 5. Fallback para palavras-chave parciais nos Válidos
-    # Ex: "Tenho diabetes tipo 2" -> contém "Diabetes"
     for valido in lista_valida:
-        # Verifica se a palavra chave do valido está no texto sujo
-        # Ex: valido="Diabetes", busca="diabetes mellitus" -> Match
-        palavra_chave = normalizar_texto(valido.split()[0]) # Pega primeira palavra (ex: "Doenca")
+        palavra_chave = normalizar_texto(valido.split()[0])
         if len(palavra_chave) > 3 and palavra_chave in busca:
-            # Cuidado com "Doenca", é muito generico.
-            if palavra_chave not in ["doenca", "dor", "perda"]:
-                 return valido
-            # Se for "Dor", tenta ver se o resto bate
+            if palavra_chave not in ["doenca", "dor", "perda"]: return valido
             if "dor" in busca and "cabeca" in busca: return "Dor De Cabeca"
             if "dor" in busca and "garganta" in busca: return "Dor De Garganta"
             if "dor" in busca and "corpo" in busca: return "Dor No Corpo"
-
     return None
 
 def processar_multivalorados(row, col_padrao, col_outros, lista_referencia):
     items = set()
     regex_split = r"[;,/|+]|\s+[eE]\s+|\s+-\s+"
-
     raw_text_list = []
     if col_padrao in row and pd.notna(row[col_padrao]): raw_text_list.append(str(row[col_padrao]))
     if col_outros in row and pd.notna(row[col_outros]): raw_text_list.append(str(row[col_outros]))
 
     for texto in raw_text_list:
-        # Quebra "Febre;Tosse" em ["Febre", "Tosse"]
         pedacos = re.split(regex_split, texto)
         for p in pedacos:
-            # Identifica o termo correto
             termo_correto = identificar_termo_canonico(p, lista_referencia)
-            if termo_correto:
-                items.add(termo_correto)
-            
+            if termo_correto: items.add(termo_correto)
     return list(items) if items else np.nan
 
-# ============================================================
-# FUNÇÕES PADRÃO
-# ============================================================
 def limpar_string(x):
     if isinstance(x, str):
         x = x.strip().replace(';', ',').replace('\n', ' ').replace('\r', '').replace('\\', '')
@@ -204,6 +155,48 @@ def inserir_via_copy(engine, nome_tabela, df, colunas_explicit=None):
         if os.path.exists(arquivo_tmp): os.remove(arquivo_tmp)
 
 # ============================================================
+# MÓDULO DE RELATÓRIO DE INTEGRIDADE (NOVO!)
+# ============================================================
+def gerar_relatorio_estatistico(df_raw, outliers_idade_count, linhas_finais):
+    print("\n--- Gerando Relatório de Integridade ---")
+    
+    total_linhas = len(df_raw)
+    
+    # 1. Percentual de Dados Faltantes (Nulos)
+    nulos = df_raw.isnull().sum()
+    nulos_pct = (nulos / total_linhas) * 100
+    top_nulos = nulos_pct.sort_values(ascending=False).head(10)
+    
+    with open("relatorio_integridade.txt", "w", encoding="utf-8") as f:
+        f.write("==================================================\n")
+        f.write("RELATÓRIO ESTATÍSTICO DE INTEGRIDADE DE DADOS (ETL)\n")
+        f.write("==================================================\n\n")
+        
+        f.write(f"DATA E HORA: {time.strftime('%d/%m/%Y %H:%M:%S')}\n")
+        f.write(f"TOTAL DE REGISTROS PROCESSADOS: {total_linhas}\n\n")
+        
+        f.write("1. ANÁLISE DE DADOS FALTANTES (TOP 10 COLUNAS)\n")
+        f.write("-" * 40 + "\n")
+        for col, pct in top_nulos.items():
+            f.write(f"{col:<30}: {pct:.2f}% nulos\n")
+            
+        f.write("\n2. OUTLIERS DETECTADOS\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"Idades Inválidas (<0 ou >120 anos): {outliers_idade_count} registros\n")
+        # Exemplo: Datas futuras (assumindo que rodamos em 2025)
+        if 'dataNotificacao' in df_raw.columns:
+            datas_futuras = pd.to_datetime(df_raw['dataNotificacao'], errors='coerce')
+            qtd_futuro = datas_futuras[datas_futuras > pd.Timestamp.now()].count()
+            f.write(f"Datas de Notificação no Futuro: {qtd_futuro} registros\n")
+            
+        f.write("\n3. RESUMO DA NORMALIZAÇÃO\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"Registros limpos inseridos no Banco: {linhas_finais}\n")
+        f.write(f"Taxa de aproveitamento: {(linhas_finais/total_linhas)*100:.1f}%\n")
+        
+    print(f"  [OK] Relatório salvo em 'relatorio_integridade.txt'")
+
+# ============================================================
 # EXECUÇÃO DO ETL
 # ============================================================
 print("--- Iniciando Leitura do CSV ---")
@@ -212,6 +205,14 @@ start_time = time.time()
 df = pd.read_csv(ARQUIVO_CSV, sep=",", dtype=str, low_memory=False)
 df.columns = df.columns.str.strip()
 df["id_gerado"] = range(1, len(df) + 1)
+
+# --- CAPTURA DE ESTATÍSTICAS PARA O RELATÓRIO (ANTES DA LIMPEZA) ---
+# Conta outliers de idade antes de limpar
+if 'idade' in df.columns:
+    idades_num = pd.to_numeric(df['idade'], errors='coerce')
+    outliers_idade = idades_num[(idades_num < 0) | (idades_num > 120)].count()
+else:
+    outliers_idade = 0
 
 print("--- Limpeza Básica ---")
 df = df.map(limpar_string)
@@ -258,13 +259,11 @@ col_names = ['notificacao_id', 'codigo_estrategia_covid', 'codigo_busca_ativa_as
 df_gestao.columns = col_names[:len(df_gestao.columns)]
 
 # ============================================================
-# SINTOMAS E CONDIÇÕES (PROCESSAMENTO INTELIGENTE)
+# SINTOMAS E CONDIÇÕES
 # ============================================================
-print("--- Processando Sintomas e Condições (Fuzzy Matching + Whitelist) ---")
+print("--- Processando Sintomas e Condições (Fuzzy + Whitelist) ---")
 
-# Aplica a limpeza usando as listas de referência
 df["lista_final_sintomas"] = df.apply(lambda x: processar_multivalorados(x, "sintomas", "outrosSintomas", SINTOMAS_VALIDOS), axis=1)
-
 col_cond = "condicoes" if "condicoes" in df.columns else "comorbidades"
 df["lista_final_condicoes"] = df.apply(lambda x: processar_multivalorados(x, col_cond, "outrasCondicoes", CONDICOES_VALIDAS), axis=1)
 
@@ -308,6 +307,9 @@ try:
         inserir_via_copy(engine, 'condicao', df_condicoes_dim, colunas_explicit=['condicao_id', 'nome'])
         df_notificacao_condicao.columns = ['notificacao_id', 'condicao_id']
         inserir_via_copy(engine, 'notificacao_condicao', df_notificacao_condicao)
+        
+    # GERA O RELATÓRIO AO FINAL DO SUCESSO
+    gerar_relatorio_estatistico(df, outliers_idade, len(df_notificacao))
 
     print("\n--- SUCESSO! ---")
     print(f"Tempo: {round(time.time() - start_time, 2)}s")
