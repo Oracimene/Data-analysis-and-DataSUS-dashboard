@@ -22,7 +22,6 @@ PASTA_SAIDA = "csv_final"
 
 os.makedirs(PASTA_SAIDA, exist_ok=True)
 
-# Listas de Referência (Whitelist)
 SINTOMAS_VALIDOS = [
     "Febre", "Tosse", "Dor De Garganta", "Dificuldade Respiratoria", 
     "Mialgia", "Dor No Corpo", "Diarreia", "Vomito", "Nausea",
@@ -316,3 +315,4 @@ try:
 
 except Exception as e:
     print(f"\nERRO: {e}")
+
