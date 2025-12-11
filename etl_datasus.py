@@ -2,20 +2,18 @@ import pandas as pd
 import numpy as np
 import os
 import re
-# AQUI ESTAVA O ERRO: Adicionei ', text'
+
 from sqlalchemy import create_engine, text 
 import time
 import unicodedata
 from difflib import get_close_matches
 
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
+# CONFIG
 DB_USER = "postgres"
 DB_PASS = "201005"   
 DB_HOST = "localhost"
 DB_PORT = "5432"
-DB_NAME = "projeto 3"
+DB_NAME = "Deus Me Ajude"
 
 CONN_STRING = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 ARQUIVO_CSV = "DataSUS.csv"
@@ -23,16 +21,13 @@ PASTA_SAIDA = "csv_final"
 
 os.makedirs(PASTA_SAIDA, exist_ok=True)
 
-# ============================================================
-# TABELA DE REFERÊNCIA (A SALVAÇÃO DOS ESTADOS)
-# ============================================================
+# TABELA DE REFERÊNCIA (A SALVAÇÃO DO ESTADO)
+
 MAPA_ESTADOS_IBGE = {
     "PARA": 15, "PA": 15
 }
 
-# ============================================================
 # LISTAS DE WHITELIST
-# ============================================================
 SINTOMAS_VALIDOS = [
     "Febre", "Tosse", "Dor De Garganta", "Dificuldade Respiratoria", 
     "Mialgia", "Dor No Corpo", "Diarreia", "Vomito", "Nausea",
@@ -68,9 +63,7 @@ DE_PARA_FORCADO = {
     "alergia": None, "ansiedade": None, "depressao": None 
 }
 
-# ============================================================
 # FUNÇÕES DE LIMPEZA
-# ============================================================
 def normalizar_texto(texto):
     if not isinstance(texto, str): return ""
     texto = texto.upper().strip() 
@@ -130,7 +123,7 @@ def limpar_string(x):
 def limpar_datas(df, colunas):
     for col in colunas:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+            df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce", format='mixed').dt.date
     return df
 
 def limpar_inteiros(df, colunas):
@@ -172,9 +165,7 @@ def gerar_relatorio_estatistico(df_raw, outliers_idade_count, linhas_finais):
         f.write(f"\n3. SUCESSO\nRegistros no Banco: {linhas_finais}\n")
     print(f"  [OK] Relatório salvo.")
 
-# ============================================================
 # EXECUÇÃO DO ETL
-# ============================================================
 print("--- Iniciando Leitura do CSV ---")
 start_time = time.time()
 
@@ -256,7 +247,6 @@ df_condicoes_dim, df_notificacao_condicao = preparar_tabelas_dim(df, "lista_fina
 print("\n--- INICIANDO CARGA ---")
 try:
     engine = create_engine(CONN_STRING)
-    # Limpa antes
     with engine.connect() as conn:
         conn.execute(text("TRUNCATE TABLE notificacao CASCADE;"))
         conn.execute(text("TRUNCATE TABLE municipio CASCADE;"))

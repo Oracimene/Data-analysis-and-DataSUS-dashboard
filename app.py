@@ -13,7 +13,7 @@ DB_USER = "postgres"
 DB_PASS = "201005"
 DB_HOST = "localhost"
 DB_PORT = "5432"
-DB_NAME = "projeto 3"
+DB_NAME = "Deus Me Ajude"
 
 @st.cache_data(ttl=0)
 def load_data():
@@ -167,7 +167,7 @@ with t1:
         fig_line = px.line(df_chart, x='data_notificacao', y='Casos', color='status', markers=True, height=500)
         st.plotly_chart(fig_line, use_container_width=True)
 
-# TAB 2: DEMOGRÁFICO E OCUPAÇÃO (CORRIGIDO)
+# TAB 2: DEMOGRÁFICO E OCUPAÇÃO
 with t2:
     r1c1, r1c2 = st.columns(2)
     with r1c1:
@@ -192,7 +192,7 @@ with t2:
         else:
             st.info("Sem dados de ocupação.")
 
-# TAB 3: TESTES (CORRIGIDO ERRO NUMÉRICO)
+# TAB 3: TESTES
 with t3:
     c_vac, c_test = st.columns([1, 1])
     
@@ -274,4 +274,4 @@ with t4:
     else: st.warning("Dados insuficientes.")
 
 st.markdown("---")
-st.caption("Projeto Big Data")
+st.caption("Projeto Banco de Dados")
